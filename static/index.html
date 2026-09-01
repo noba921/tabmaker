@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAB Maker</title>
+<style>
+  :root {
+    --bg: #12121c; --panel: #1c1c2e; --panel2: #252540;
+    --text: #eceaf5; --sub: #9a96b8; --accent: #7c5cff;
+    --accent2: #ff5c8a; --ok: #4cd9a2; --line: #34345a; --paper: #1a1a28;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg); color: var(--text); min-height: 100vh;
+    font-family: "Segoe UI", "Hiragino Sans", "Yu Gothic UI", sans-serif;
+  }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  h1 .ico { color: var(--accent2); }
+  .tagline { color: var(--sub); font-size: 13px; margin-bottom: 22px; }
+  .card {
+    background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 20px; margin-bottom: 18px;
+  }
+  .card h2 { font-size: 15px; margin-bottom: 14px; color: var(--sub); font-weight: 600; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  input[type=text] {
+    flex: 1; min-width: 220px; background: var(--panel2); border: 1px solid var(--line);
+    color: var(--text); padding: 11px 14px; border-radius: 9px; font-size: 14px;
+  }
+  input[type=text]:focus { outline: none; border-color: var(--accent); }
+  select {
+    background: var(--panel2); border: 1px solid var(--line); color: var(--text);
+    padding: 8px 10px; border-radius: 8px; font-size: 13px;
+  }
+  label.f { font-size: 12px; color: var(--sub); display: flex; align-items: center; gap: 6px; }
+  button {
+    background: var(--accent); color: #fff; border: none; border-radius: 9px;
+    padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer;
+  }
+  button:hover { filter: brightness(1.15); }
+  button:disabled { opacity: .45; cursor: default; }
+  button.ghost { background: var(--panel2); color: var(--text); border: 1px solid var(--line); }
+  button.sm { padding: 8px 13px; font-size: 13px; }
+  button.danger { background: transparent; color: var(--sub); border: 1px solid var(--line); padding: 8px 12px; }
+  .job { display: none; margin-top: 14px; padding: 14px 16px; border-radius: 9px;
+         background: var(--panel2); font-size: 13px; color: var(--sub); }
+  .job.show { display: block; }
+  .job.error { color: var(--accent2); white-space: pre-wrap; word-break: break-all; }
+  .jobtitle { color: var(--text); font-weight: 600; margin-bottom: 10px; }
+  .phase { display: flex; align-items: center; gap: 8px; padding: 3px 0; }
+  .phase .mark { width: 16px; text-align: center; flex: none; }
+  .phase.done { color: var(--ok); }
+  .phase.active { color: var(--text); font-weight: 600; }
+  .phase .pct { color: var(--accent); font-weight: 700; margin-left: 4px; }
+  .spinner { width: 13px; height: 13px; border: 2px solid var(--line);
+    border-top-color: var(--accent); border-radius: 50%; flex: none;
+    animation: spin .8s linear infinite; display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .pbar { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 10px 0 6px; }
+  .pbar > div { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); transition: width .5s; }
+  .jobdetail { font-size: 12px; color: var(--sub); margin-top: 6px; }
+  .song { display: flex; align-items: center; gap: 12px; padding: 12px 4px;
+          border-bottom: 1px solid var(--line); }
+  .song:last-child { border-bottom: none; }
+  .song .title { flex: 1; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .song .meta { color: var(--sub); font-size: 12px; white-space: nowrap; }
+  .empty { color: var(--sub); font-size: 13px; padding: 8px 4px; }
+  .hint { font-size: 12px; color: var(--sub); margin-top: 12px; line-height: 1.7; }
+  .view { display: none; } .view.show { display: block; }
+  /* YouTube検索 */
+  .sres { margin-top: 14px; max-height: 520px; overflow-y: auto; }
+  .sitem { display: flex; gap: 12px; padding: 10px; border-radius: 11px;
+           border: 1px solid transparent; align-items: center; }
+  .sitem:hover { background: rgba(124,92,255,.10); border-color: var(--line); }
+  .sitem img { width: 120px; height: 68px; object-fit: cover; border-radius: 7px;
+               flex: none; background: #000; }
+  .sitem .m2 { flex: 1; min-width: 0; }
+  .sitem .st { font-size: 14px; font-weight: 600; line-height: 1.45;
+               display: -webkit-box; -webkit-line-clamp: 2;
+               -webkit-box-orient: vertical; overflow: hidden; }
+  .sitem .sc2 { font-size: 12px; color: var(--sub); margin-top: 3px; }
+  .sitem button { flex: none; }
+  .havemark { font-size: 11px; color: var(--ok); border: 1px solid var(--ok);
+              border-radius: 4px; padding: 1px 6px; margin-left: 6px; }
+  /* エンジン設定 */
+  .engrow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+            padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .engrow:last-child { border-bottom: none; }
+  .engrow .name { width: 130px; font-size: 13px; color: var(--sub); flex: none; }
+  .engrow select { flex: 1; min-width: 240px; }
+  .engrow .desc { flex-basis: 100%; font-size: 12px; color: var(--sub);
+                  line-height: 1.6; padding-left: 130px; }
+  .tag { font-size: 10px; padding: 2px 6px; border-radius: 4px; flex: none;
+         border: 1px solid var(--line); color: var(--sub); }
+  .tag.cpu { color: var(--ok); border-color: var(--ok); }
+  .tag.slow { color: #ffcf6b; border-color: #ffcf6b; }
+  .tag.gpu { color: var(--accent2); border-color: var(--accent2); }
+  .tag.off { color: #6f6b90; }
+  .devline { font-size: 12px; color: var(--sub); margin-bottom: 12px; }
+  .devline b { color: var(--ok); }
+  /* 譜面ビュー */
+  .schead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 4px; }
+  .schead h2 { font-size: 19px; color: var(--text); margin: 0; }
+  .scmeta { color: var(--sub); font-size: 13px; margin-bottom: 16px; }
+  .tabs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 14px; }
+  .tabs button { background: var(--panel2); color: var(--sub); border: 1px solid var(--line);
+    border-radius: 999px; padding: 8px 16px; font-size: 13px; }
+  .tabs button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .toolbar { display: flex; gap: 10px; flex-wrap: wrap; align-items: center;
+             padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+  .player { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .player .t { font-size: 12px; color: var(--sub); font-variant-numeric: tabular-nums; }
+  .seek { flex: 1; min-width: 200px; accent-color: var(--accent); }
+  .paper { background: var(--paper); border-radius: 10px; padding: 10px 4px; overflow-x: hidden; }
+  .stat { font-size: 12px; color: var(--sub); margin-top: 10px; }
+  .warn { color: #ffcf6b; font-size: 12px; margin-top: 8px; line-height: 1.6; }
+  svg text { font-family: "Consolas", "Segoe UI", monospace; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="ico">&#127925;</span> TAB Maker</h1>
+  <div class="tagline">YouTubeのURLから、楽器ごとに音を分けて TAB譜・楽譜を自動生成します</div>
+
+  <!-- ================= ホーム ================= -->
+  <div id="home" class="view show">
+    <div class="card">
+      <h2>曲を探す</h2>
+      <div class="row">
+        <input type="text" id="q" placeholder="曲名やアーティスト名で検索">
+        <button id="btnSearch">検索</button>
+      </div>
+      <div class="sres" id="sres"></div>
+    </div>
+
+    <div class="card">
+      <h2>URL・ファイルから追加</h2>
+      <div class="row">
+        <input type="text" id="url" placeholder="https://www.youtube.com/watch?v=...">
+        <button id="btnUrl">採譜する</button>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="ghost sm" id="btnFile">音声ファイルから</button>
+        <input type="file" id="file" accept="audio/*,video/*" style="display:none">
+        <span class="hint" style="margin:0" id="aiState"></span>
+      </div>
+      <div class="job" id="job"></div>
+      <div class="hint">
+        分離と採譜で1曲あたり数分〜十数分かかります(CPUの場合)。初回はAIモデルのダウンロードが入ります。<br>
+        自動採譜は完璧ではありません。大枠を取ってから MusicXML を MuseScore で直す、という使い方が現実的です。
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>採譜した曲 <span style="float:right;font-weight:400" id="total"></span></h2>
+      <div id="songs"><div class="empty">まだありません</div></div>
+    </div>
+
+    <div class="card">
+      <h2>処理エンジンの設定
+        <button class="ghost sm" id="engToggle" style="float:right;margin-top:-4px">開く</button>
+      </h2>
+      <div id="engPanel" style="display:none">
+        <div class="devline" id="devLine"></div>
+        <div id="engRows"></div>
+        <div class="hint">
+          設定は次に採譜する曲から反映されます(既にある曲の譜面は作り直されません)。<br>
+          <span class="tag cpu">CPU</span> はノートPCでも実用的、
+          <span class="tag slow">低速</span> はCPUだと待たされる、
+          <span class="tag gpu">GPU</span> はNVIDIA GPU向けです。
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= 譜面 ================= -->
+  <div id="score" class="view">
+    <button class="ghost sm" id="btnBack" style="margin-bottom:14px">&larr; 曲リストへ</button>
+    <div class="card">
+      <div class="schead"><h2 id="scTitle"></h2></div>
+      <div class="scmeta" id="scMeta"></div>
+      <div class="tabs" id="partTabs"></div>
+
+      <div class="player">
+        <button class="sm" id="btnPlay">▶ 再生</button>
+        <span class="t" id="tNow">0:00</span>
+        <input type="range" class="seek" id="seek" min="0" max="1000" value="0">
+        <span class="t" id="tEnd">0:00</span>
+        <label class="f">音源
+          <select id="stemSel">
+            <option value="mix">全体ミックス</option>
+            <option value="part">このパートだけ</option>
+          </select>
+        </label>
+      </div>
+
+      <div class="toolbar" id="toolbar"></div>
+      <div class="paper" id="paper"></div>
+      <div class="stat" id="scStat"></div>
+      <div class="warn" id="scWarn"></div>
+    </div>
+  </div>
+</div>
+
+<audio id="audio" preload="auto"></audio>
+
+<script>
+const $ = id => document.getElementById(id);
+let CONFIG = {tunings:{}, drum_order:[], drum_labels:{}};
+let SC = null;        // 現在の譜面データ
+let CURPART = null;   // 表示中のパート名
+let poll = null;
+
+// ---------------------------------------------------------------- 共通
+const fmt = s => { s = Math.max(0, Math.round(s||0));
+  return Math.floor(s/60) + ":" + String(s%60).padStart(2,"0"); };
+const esc = s => String(s??"").replace(/[&<>"]/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+async function api(url, opt) {
+  const r = await fetch(url, opt);
+  const ct = r.headers.get("content-type") || "";
+  const d = ct.includes("json") ? await r.json() : {};
+  if (!r.ok) throw new Error(d.error || ("通信エラー " + r.status));
+  return d;
+}
+
+function show(view) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("show"));
+  $(view).classList.add("show");
+  window.scrollTo(0, 0);
+}
+
+// ---------------------------------------------------------------- 曲追加
+async function startJob(promise) {
+  $("job").className = "job show";
+  $("job").innerHTML = '<div class="jobtitle"><span class="spinner"></span> 準備中...</div>';
+  try {
+    const d = await promise;
+    watchJob(d.job);
+  } catch (e) {
+    $("job").className = "job show error";
+    $("job").textContent = e.message;
+  }
+}
+
+function watchJob(id) {
+  clearInterval(poll);
+  poll = setInterval(async () => {
+    let j;
+    try { j = await api("/api/jobs/" + id); }
+    catch (e) { clearInterval(poll); $("job").className="job show error";
+                $("job").textContent = e.message; return; }
+    if (j.status === "error") {
+      clearInterval(poll);
+      $("job").className = "job show error";
+      $("job").textContent = "失敗しました:\n" + j.error;
+      return;
+    }
+    if (j.status === "done") {
+      clearInterval(poll);
+      $("job").className = "job show";
+      $("job").innerHTML = '<div class="jobtitle" style="color:var(--ok)">✓ 完了: '
+        + esc(j.title) + '</div>';
+      loadSongs();
+      openScore(j.song_id);
+      return;
+    }
+    renderJob(j);
+  }, 700);
+}
+
+function renderJob(j) {
+  let h = '<div class="jobtitle"><span class="spinner"></span> '
+        + esc(j.title || "処理中...") + '</div>';
+  j.phases.forEach((p, i) => {
+    const cls = i < j.phase ? "done" : (i === j.phase ? "active" : "");
+    const mark = i < j.phase ? "✓" : (i === j.phase ? "▶" : "·");
+    const pct = (i === j.phase && j.progress != null)
+      ? '<span class="pct">' + Math.round(j.progress) + '%</span>' : "";
+    h += '<div class="phase ' + cls + '"><span class="mark">' + mark + '</span>'
+       + esc(p) + pct + '</div>';
+  });
+  if (j.progress != null)
+    h += '<div class="pbar"><div style="width:' + j.progress + '%"></div></div>';
+  if (j.detail) h += '<div class="jobdetail">' + esc(j.detail) + '</div>';
+  $("job").className = "job show";
+  $("job").innerHTML = h;
+}
+
+$("btnUrl").onclick = () => {
+  const url = $("url").value.trim();
+  if (!url) return;
+  startJob(api("/api/songs/youtube", {method:"POST",
+    headers:{"Content-Type":"application/json"}, body: JSON.stringify({url})}));
+};
+$("url").addEventListener("keydown", e => { if (e.key === "Enter") $("btnUrl").click(); });
+$("btnFile").onclick = () => $("file").click();
+$("file").onchange = () => {
+  if (!$("file").files[0]) return;
+  const fd = new FormData();
+  fd.append("file", $("file").files[0]);
+  startJob(api("/api/songs/upload", {method:"POST", body: fd}));
+  $("file").value = "";
+};
+
+// ---------------------------------------------------------------- YouTube検索
+const fmtViews = v => !v ? "" :
+  v >= 1e8 ? (v/1e8).toFixed(1)+"億回" :
+  v >= 1e4 ? Math.round(v/1e4)+"万回" : v+"回";
+
+async function doSearch() {
+  const q = $("q").value.trim();
+  if (!q) return;
+  $("btnSearch").disabled = true;
+  $("sres").innerHTML = '<div class="empty"><span class="spinner"></span> 検索中...</div>';
+  try {
+    const d = await api("/api/search?q=" + encodeURIComponent(q));
+    const r = d.results || [];
+    if (!r.length) { $("sres").innerHTML = '<div class="empty">見つかりませんでした</div>'; return; }
+    $("sres").innerHTML = r.map((x, i) => `
+      <div class="sitem">
+        <img src="${esc(x.thumb)}" loading="lazy" alt="">
+        <div class="m2">
+          <div class="st">${esc(x.title)}${x.have?'<span class="havemark">取込済</span>':''}</div>
+          <div class="sc2">${esc(x.channel)}${x.duration?" · "+fmt(x.duration):""}${x.views?" · "+fmtViews(x.views):""}</div>
+        </div>
+        <button class="sm" data-i="${i}">採譜する</button>
+      </div>`).join("");
+    $("sres").querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
+      const x = r[+b.dataset.i];
+      $("url").value = x.url;
+      startJob(api("/api/songs/youtube", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body: JSON.stringify({url: x.url})}));
+      $("job").scrollIntoView({behavior:"smooth", block:"center"});
+    });
+  } catch (e) {
+    $("sres").innerHTML = '<div class="empty" style="color:var(--accent2)">' + esc(e.message) + '</div>';
+  }
+  $("btnSearch").disabled = false;
+}
+$("btnSearch").onclick = doSearch;
+$("q").addEventListener("keydown", e => { if (e.key === "Enter") doSearch(); });
+
+// ---------------------------------------------------------------- エンジン設定
+const TIER = {cpu:["CPU","cpu"], "cpu-slow":["低速","slow"], gpu:["GPU","gpu"]};
+
+$("engToggle").onclick = () => {
+  const p = $("engPanel"), open = p.style.display === "none";
+  p.style.display = open ? "block" : "none";
+  $("engToggle").textContent = open ? "閉じる" : "開く";
+};
+
+function renderEngines(eng) {
+  $("devLine").innerHTML = eng.cuda
+    ? "NVIDIA GPU を検出しました → <b>" + eng.device + "</b> で動きます"
+    : "GPUは見つかりませんでした → <b>CPU</b> で動きます(GPU向けエンジンは選べますが遅くなります)";
+  $("engRows").innerHTML = Object.entries(eng.stages).map(([stage, s]) => {
+    const opts = [`<option value="auto"${eng.config[stage]==="auto"?" selected":""}>`
+                + `おまかせ (現在: ${esc((s.options.find(o=>o.id===s.active)||{}).label||s.active)})</option>`]
+      .concat(s.options.map(o =>
+        `<option value="${o.id}"${eng.config[stage]===o.id?" selected":""}`
+        + `${o.available?"":" disabled"}>`
+        + `${esc(o.label)}${o.recommended?" ★":""}${o.available?"":" — 未インストール"}</option>`));
+    const act = s.options.find(o => o.id === s.active) || {};
+    const t = TIER[act.tier] || ["", ""];
+    return `<div class="engrow">
+      <span class="name">${esc(s.label)}</span>
+      <select data-stage="${stage}">${opts.join("")}</select>
+      <span class="tag ${t[1]}">${t[0]}</span>
+      <div class="desc">${esc(act.desc||"")}${act.available===false&&act.hint?" / "+esc(act.hint):""}</div>
+    </div>`;
+  }).join("");
+  // 採譜するパート(減らすとその分速くなる)と、保存の仕方
+  const parts = eng.parts || [];
+  $("engRows").insertAdjacentHTML("beforeend", `
+    <div class="engrow">
+      <span class="name">採譜するパート</span>
+      <span style="flex:1;display:flex;gap:14px;flex-wrap:wrap">${
+        (eng.all_parts||[]).map(p =>
+          `<label class="f"><input type="checkbox" data-part="${p.id}"`
+          + `${parts.includes(p.id)?" checked":""}> ${esc(p.label)}</label>`).join("")}</span>
+      <div class="desc">要らないパートを外すと、その分だけ採譜が速く終わります</div>
+    </div>
+    <div class="engrow">
+      <span class="name">音源の保存</span>
+      <select id="audFmt">
+        <option value="opus"${eng.config.audio_format==="opus"?" selected":""}>Opus (小さい・推奨)</option>
+        <option value="mp3"${eng.config.audio_format==="mp3"?" selected":""}>MP3 (互換性重視)</option>
+      </select>
+      <select id="keepStems">
+        <option value="used"${eng.config.keep_stems==="used"?" selected":""}>使ったステムだけ残す</option>
+        <option value="all"${eng.config.keep_stems==="all"?" selected":""}>全ステムを残す</option>
+        <option value="none"${eng.config.keep_stems==="none"?" selected":""}>ミックスのみ (最小)</option>
+      </select>
+      <div class="desc">パートごとの音を再生するにはステムが要ります。
+        「ミックスのみ」だと1曲あたりの容量が最小になります</div>
+    </div>`);
+
+  const push = async patch => {
+    try {
+      CONFIG.engines = await api("/api/config", {method:"POST",
+        headers:{"Content-Type":"application/json"}, body: JSON.stringify(patch)});
+      renderEngines(CONFIG.engines);
+    } catch (e) { alert(e.message); }
+  };
+  $("engRows").querySelectorAll("select[data-stage]").forEach(sel =>
+    sel.onchange = () => { sel.disabled = true; push({[sel.dataset.stage]: sel.value}); });
+  $("audFmt").onchange = () => push({audio_format: $("audFmt").value});
+  $("keepStems").onchange = () => push({keep_stems: $("keepStems").value});
+  $("engRows").querySelectorAll("[data-part]").forEach(cb => cb.onchange = () => {
+    const sel = [...$("engRows").querySelectorAll("[data-part]")]
+      .filter(x => x.checked).map(x => x.dataset.part);
+    if (!sel.length) { cb.checked = true; return; }   // 全部外すのは不可
+    push({parts: sel});
+  });
+}
+
+// ---------------------------------------------------------------- 曲リスト
+const mb = b => !b ? "" : (b/1e6).toFixed(b < 1e7 ? 1 : 0) + "MB";
+
+async function loadSongs() {
+  const d = await api("/api/songs");
+  const list = d.songs || [];
+  $("total").textContent = list.length
+    ? `${list.length}曲 · 合計 ${mb(d.total_size)}` : "";
+  if (!list.length) { $("songs").innerHTML = '<div class="empty">まだありません</div>'; return; }
+  $("songs").innerHTML = list.map(s => `
+    <div class="song">
+      <div class="title">${esc(s.title)}</div>
+      <div class="meta">${fmt(s.duration)} / ${s.tempo} BPM / ${esc(s.key||"")} / ${mb(s.size)}</div>
+      <button class="sm" data-open="${s.id}">譜面を見る</button>
+      <button class="danger" data-del="${s.id}">削除</button>
+    </div>`).join("");
+  $("songs").querySelectorAll("[data-open]").forEach(b =>
+    b.onclick = () => openScore(b.dataset.open));
+  $("songs").querySelectorAll("[data-del]").forEach(b =>
+    b.onclick = async () => {
+      if (!confirm("この曲を削除しますか?")) return;
+      await api("/api/songs/" + b.dataset.del, {method:"DELETE"});
+      loadSongs();
+    });
+}
+
+// ---------------------------------------------------------------- 譜面
+async function openScore(id) {
+  SC = await api("/api/songs/" + id + "/score");
+  CURPART = Object.keys(SC.parts)[0];
+  $("scTitle").textContent = SC.title;
+  const en = SC.engines || {};
+  $("scMeta").textContent =
+    `${SC.tempo} BPM  ·  ${SC.key}  ·  ${SC.beats_per_bar}/4  ·  ${SC.measures}小節`
+    + (en.separator ? `  ·  分離:${en.separator} / 拍:${en.beat} / 採譜:${en.pitch}`
+                      + ` / ドラム:${en.drums}` : "");
+  $("partTabs").innerHTML = Object.entries(SC.parts).map(([k,p]) =>
+    `<button data-part="${k}">${esc(p.label)}<span style="opacity:.6"> ${p.stats.notes||0}</span></button>`
+  ).join("");
+  $("partTabs").querySelectorAll("[data-part]").forEach(b =>
+    b.onclick = () => selectPart(b.dataset.part));
+  $("tEnd").textContent = fmt(SC.duration);
+  setAudio();
+  show("score");
+  selectPart(CURPART);
+}
+
+function selectPart(name) {
+  CURPART = name;
+  $("partTabs").querySelectorAll("[data-part]").forEach(b =>
+    b.classList.toggle("on", b.dataset.part === name));
+  renderToolbar();
+  drawScore();
+  if ($("stemSel").value === "part") setAudio();
+}
+
+function renderToolbar() {
+  const p = SC.parts[CURPART];
+  let h = "";
+  if (p.kind === "tab") {
+    const tun = CONFIG.tunings[p.instrument] || {};
+    h += `<label class="f">チューニング <select id="selTun">` +
+      Object.entries(tun).map(([k,v]) =>
+        `<option value="${k}"${k===p.tuning?" selected":""}>${esc(v)}</option>`).join("") +
+      `</select></label>`;
+    h += `<label class="f">カポ <select id="selCapo">` +
+      Array.from({length:10}, (_,i) =>
+        `<option value="${i}"${i===(p.capo||0)?" selected":""}>${i?i+"F":"なし"}</option>`).join("") +
+      `</select></label>`;
+    h += `<label class="f">最高フレット <select id="selFret">` +
+      [12,14,15,17,20,22].map(v =>
+        `<option value="${v}"${v===17?" selected":""}>${v}F</option>`).join("") +
+      `</select></label>`;
+    h += `<button class="sm" id="btnRetab">運指を作り直す</button>`;
+  }
+  h += `<label class="f">小節の頭 <button class="ghost sm" id="shiftL">◀ 1拍</button>`
+     + `<button class="ghost sm" id="shiftR">1拍 ▶</button></label>`;
+  h += `<span style="flex:1"></span>`;
+  h += `<button class="ghost sm" id="dlXml">MusicXML</button>`;
+  h += `<button class="ghost sm" id="dlMid">MIDI</button>`;
+  if (p.kind === "tab") h += `<button class="ghost sm" id="dlTxt">テキストTAB</button>`;
+  $("toolbar").innerHTML = h;
+
+  const base = "/api/songs/" + SC.id + "/export/";
+  $("dlXml").onclick = () => location.href = base + "musicxml";
+  $("dlMid").onclick = () => location.href = base + "midi";
+  if ($("dlTxt")) $("dlTxt").onclick = () => location.href = base + "txt?part=" + CURPART;
+  const shift = async d => {
+    await api("/api/songs/" + SC.id + "/shift", {method:"POST",
+      headers:{"Content-Type":"application/json"}, body: JSON.stringify({beats:d})});
+    const keep = CURPART;
+    SC = await api("/api/songs/" + SC.id + "/score");
+    CURPART = keep; drawScore();
+  };
+  $("shiftL").onclick = () => shift(-1);
+  $("shiftR").onclick = () => shift(1);
+  if ($("btnRetab")) $("btnRetab").onclick = async () => {
+    const btn = $("btnRetab"); btn.disabled = true; btn.textContent = "計算中...";
+    try {
+      SC.parts[CURPART] = await api("/api/songs/" + SC.id + "/retab", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({part: CURPART, tuning: $("selTun").value,
+          capo: +$("selCapo").value, max_fret: +$("selFret").value})});
+      drawScore();
+    } catch (e) { alert(e.message); }
+    btn.disabled = false; btn.textContent = "運指を作り直す";
+  };
+}
+
+// ------- 拍 <-> 秒 (サーバーで推定した拍位置を使う)
+function timeToBeat(t) {
+  const bt = SC.beat_times || [];
+  if (bt.length < 2) return t / SC.sec_per_beat - (SC.phase||0);
+  let b;
+  if (t <= bt[0]) b = (t - bt[0]) / SC.sec_per_beat;
+  else if (t >= bt[bt.length-1]) b = bt.length - 1 + (t - bt[bt.length-1]) / SC.sec_per_beat;
+  else {
+    let lo = 0, hi = bt.length - 1;
+    while (hi - lo > 1) { const m = (lo+hi) >> 1; if (bt[m] <= t) lo = m; else hi = m; }
+    b = lo + (t - bt[lo]) / (bt[hi] - bt[lo]);
+  }
+  return b - (SC.phase||0);
+}
+function beatToTime(b) {
+  const bt = SC.beat_times || [];
+  const x = b + (SC.phase||0);
+  if (bt.length < 2) return x * SC.sec_per_beat;
+  if (x <= 0) return bt[0] + x * SC.sec_per_beat;
+  if (x >= bt.length-1) return bt[bt.length-1] + (x - (bt.length-1)) * SC.sec_per_beat;
+  const i = Math.floor(x);
+  return bt[i] + (x - i) * (bt[i+1] - bt[i]);
+}
+
+// ------- 描画
+const BAR_MIN = 210, PAD_L = 34, PAD_R = 8;
+let LAYOUT = null;   // 小節 -> 画面座標 の対応表 (再生位置の表示に使う)
+
+function drawScore() {
+  const p = SC.parts[CURPART];
+  const wrapW = $("paper").clientWidth - 12;
+  const perLine = Math.max(1, Math.floor((wrapW - PAD_L - PAD_R) / BAR_MIN));
+  const barW = (wrapW - PAD_L - PAD_R) / perLine;
+  const bpb = SC.beats_per_bar;
+  const nBars = Math.max(1, SC.measures);
+  const lines = Math.ceil(nBars / perLine);
+
+  const geo = geometry(p);
+  const chordList = SC.chords || [];
+  const chordPad = chordList.length ? 17 : 0;
+  const topPad = 22 + chordPad;
+  const lineH = geo.height + 34 + chordPad;
+  const svgH = lines * lineH + 10;
+  let s = `<svg width="${wrapW}" height="${svgH}" viewBox="0 0 ${wrapW} ${svgH}">`;
+  LAYOUT = {perLine, barW, lineH, topPad, top: geo.top, height: geo.height, bpb};
+
+  for (let li = 0; li < lines; li++) {
+    const y0 = li * lineH + topPad;
+    s += staffLines(p, geo, y0, PAD_L, perLine * barW);
+    // 弦名 / パート名
+    s += geo.labels.map((t, i) =>
+      `<text x="4" y="${y0 + geo.rowY(i) + 3.5}" fill="#7d7a9c" font-size="10">${t}</text>`).join("");
+    for (let b = 0; b < perLine; b++) {
+      const bar = li * perLine + b;
+      if (bar >= nBars) break;
+      const x = PAD_L + b * barW;
+      s += `<line x1="${x}" y1="${y0+geo.top}" x2="${x}" y2="${y0+geo.bottom}" stroke="#3a3a5e" stroke-width="1"/>`;
+      s += `<text x="${x+3}" y="${y0+geo.top-6}" fill="#5d5a80" font-size="9">${bar+1}</text>`;
+      if (chordPad) s += drawChords(chordList, bar, x, barW, y0 + geo.top - 19);
+      // 拍の目盛
+      for (let k = 1; k < bpb; k++) {
+        const bx = x + barW * k / bpb;
+        s += `<line x1="${bx}" y1="${y0+geo.top}" x2="${bx}" y2="${y0+geo.bottom}" stroke="#2a2a45" stroke-width="1"/>`;
+      }
+      s += drawBar(p, geo, bar, x, barW, y0);
+    }
+    const xEnd = PAD_L + Math.min(perLine, nBars - li*perLine) * barW;
+    s += `<line x1="${xEnd}" y1="${y0+geo.top}" x2="${xEnd}" y2="${y0+geo.bottom}" stroke="#3a3a5e" stroke-width="1.6"/>`;
+  }
+  s += `<line id="playhead" x1="0" y1="0" x2="0" y2="0" stroke="var(--accent2)" stroke-width="1.6" opacity="0"/>`;
+  s += `</svg>`;
+  $("paper").innerHTML = s;
+
+  const st = p.stats || {};
+  $("scStat").textContent = p.kind === "tab"
+    ? `音符 ${st.notes||0} 個 / 使用フレット ${st.min_fret||0}〜${st.max_fret||0} / 開放弦の割合 ${Math.round((st.open_ratio||0)*100)}%`
+    : `音符 ${st.notes||0} 個`;
+  $("scWarn").textContent = warnFor(CURPART);
+}
+
+function drawChords(list, bar, x, barW, y) {
+  const bpb = SC.beats_per_bar, b0 = bar * bpb, b1 = b0 + bpb;
+  let s = "";
+  for (const c of list) {
+    if (c.b < b0 || c.b >= b1) continue;
+    const cx = x + (c.b - b0) / bpb * barW + 2;
+    s += `<text x="${cx}" y="${y}" fill="#c9b8ff" font-size="12" font-weight="700">`
+       + esc(c.name) + `</text>`;
+  }
+  return s;
+}
+
+function warnFor(name) {
+  if (name === "guitar" || name === "piano")
+    return "※ ギター/ピアノは同じ「その他」の音源から採譜しているため、シンセや弦楽器が混ざることがあります。";
+  if (name === "drums")
+    return "※ ドラムは打点の周波数分布から種類を推定しています。タムとスネアの取り違えが起きやすいです。";
+  if (name === "melody")
+    return "※ メロディはボーカルのピッチをそのまま音符にしています。しゃくり・ビブラートは丸められます。";
+  return "";
+}
+
+function geometry(p) {
+  if (p.kind === "tab") {
+    const n = p.strings.length, gap = 15;
+    const names = p.strings.map(m => noteName(m).replace(/\d/,""));
+    return {top: 0, bottom: (n-1)*gap, height: (n-1)*gap, gap, rows: n,
+            rowY: i => i*gap, labels: names, kind:"tab"};
+  }
+  if (p.kind === "drums") {
+    const used = CONFIG.drum_order.filter(k => p.notes.some(n => n.inst === k));
+    const rows = used.length || 1, gap = 15;
+    return {top: 0, bottom: (rows-1)*gap, height: (rows-1)*gap, gap, rows,
+            rowY: i => i*gap, labels: used.map(k => (CONFIG.drum_labels[k]||k).slice(0,4)),
+            used, kind:"drums"};
+  }
+  const gap = 9;  // 五線の線間
+  return {top: -18, bottom: 4*gap + 18, height: 4*gap + 36, gap, rows: 5,
+          rowY: i => i*gap, labels: [], kind:"staff"};
+}
+
+function staffLines(p, geo, y0, x, w) {
+  let s = "";
+  const rows = geo.kind === "staff" ? 5 : geo.rows;
+  for (let i = 0; i < rows; i++) {
+    s += `<line x1="${x}" y1="${y0+geo.rowY(i)}" x2="${x+w}" y2="${y0+geo.rowY(i)}" stroke="#3d3d63" stroke-width="1"/>`;
+  }
+  return s;
+}
+
+const LETTERS = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const DIA     = [0,0,1,1,2,3,3,4,4,5,5,6];
+const ACC     = [0,1,0,1,0,0,1,0,1,0,1,0];
+const noteName = m => LETTERS[m%12] + (Math.floor(m/12)-1);
+const diaOf = m => Math.floor(m/12) * 7 + DIA[m%12];
+
+function drawBar(p, geo, bar, x, barW, y0) {
+  const bpb = SC.beats_per_bar;
+  const b0 = bar * bpb, b1 = b0 + bpb;
+  const notes = p.notes.filter(n => n.b >= b0 && n.b < b1);
+  if (!notes.length) return "";
+  let s = "";
+  const px = n => x + (n.b - b0) / bpb * barW;
+
+  if (p.kind === "tab") {
+    for (const n of notes) {
+      const cx = px(n), cy = y0 + geo.rowY(n.string - 1);
+      const t = String(n.fret), w = t.length * 7 + 4;
+      s += `<rect x="${cx-2}" y="${cy-6}" width="${w}" height="12" fill="var(--paper)"/>`;
+      s += `<text x="${cx}" y="${cy+4}" fill="#e9e6ff" font-size="12" font-weight="600">${t}</text>`;
+    }
+    return s;
+  }
+  if (p.kind === "drums") {
+    for (const n of notes) {
+      const i = geo.used.indexOf(n.inst);
+      if (i < 0) continue;
+      const cx = px(n), cy = y0 + geo.rowY(i);
+      if (n.inst === "kick" || n.inst === "snare" || n.inst === "tom")
+        s += `<circle cx="${cx+3}" cy="${cy}" r="3.6" fill="${n.inst==="kick"?"#ff5c8a":"#7c5cff"}"/>`;
+      else
+        s += `<text x="${cx}" y="${cy+4}" fill="#4cd9a2" font-size="12" font-weight="700">✕</text>`;
+    }
+    return s;
+  }
+
+  // 五線譜
+  const bottomDia = diaOf(64);         // E4 = 下第1線
+  for (const n of notes) {
+    const cx = px(n) + 4;
+    const d = diaOf(n.midi);
+    const cy = y0 + 4 * geo.gap - (d - bottomDia) * (geo.gap / 2);
+    // 加線
+    for (let dd = bottomDia - 2; dd >= d; dd -= 2) {
+      const ly = y0 + 4*geo.gap - (dd - bottomDia) * (geo.gap/2);
+      s += `<line x1="${cx-7}" y1="${ly}" x2="${cx+7}" y2="${ly}" stroke="#3d3d63"/>`;
+    }
+    for (let dd = bottomDia + 10; dd <= d; dd += 2) {
+      const ly = y0 + 4*geo.gap - (dd - bottomDia) * (geo.gap/2);
+      s += `<line x1="${cx-7}" y1="${ly}" x2="${cx+7}" y2="${ly}" stroke="#3d3d63"/>`;
+    }
+    const filled = n.d < 2;
+    s += `<ellipse cx="${cx}" cy="${cy}" rx="4.6" ry="3.4" transform="rotate(-18 ${cx} ${cy})" `
+       + (filled ? `fill="#e9e6ff"/>` : `fill="none" stroke="#e9e6ff" stroke-width="1.4"/>`);
+    if (n.d < 4) {
+      const up = cy > y0 + 2*geo.gap;
+      s += up ? `<line x1="${cx+4.4}" y1="${cy}" x2="${cx+4.4}" y2="${cy-22}" stroke="#e9e6ff"/>`
+              : `<line x1="${cx-4.4}" y1="${cy}" x2="${cx-4.4}" y2="${cy+22}" stroke="#e9e6ff"/>`;
+    }
+    if (ACC[n.midi % 12])
+      s += `<text x="${cx-14}" y="${cy+4}" fill="#a8a4d0" font-size="12">♯</text>`;
+  }
+  return s;
+}
+
+// ------- 再生
+function setAudio() {
+  if (!SC) return;
+  const p = SC.parts[CURPART];
+  const stem = ($("stemSel").value === "part" && p && p.stem) ? p.stem : "mix";
+  const url = "/api/songs/" + SC.id + "/audio/" + stem;
+  const a = $("audio");
+  const t = a.currentTime, playing = !a.paused;
+  a.src = url;
+  a.currentTime = t || 0;
+  if (playing) a.play().catch(()=>{});
+}
+$("stemSel").onchange = setAudio;
+$("btnPlay").onclick = () => {
+  const a = $("audio");
+  if (a.paused) { a.play(); $("btnPlay").textContent = "❚❚ 一時停止"; }
+  else { a.pause(); $("btnPlay").textContent = "▶ 再生"; }
+};
+$("seek").oninput = () => {
+  const a = $("audio");
+  if (a.duration) a.currentTime = $("seek").value / 1000 * a.duration;
+};
+$("audio").addEventListener("timeupdate", () => {
+  const a = $("audio");
+  $("tNow").textContent = fmt(a.currentTime);
+  if (a.duration) $("seek").value = Math.round(a.currentTime / a.duration * 1000);
+  movePlayhead(a.currentTime);
+});
+$("audio").addEventListener("ended", () => $("btnPlay").textContent = "▶ 再生");
+
+function movePlayhead(t) {
+  if (!LAYOUT || !SC) return;
+  const el = document.getElementById("playhead");
+  if (!el) return;
+  const beat = timeToBeat(t);
+  const bar = Math.floor(beat / LAYOUT.bpb);
+  if (bar < 0 || bar >= SC.measures) { el.setAttribute("opacity", "0"); return; }
+  const li = Math.floor(bar / LAYOUT.perLine);
+  const col = bar % LAYOUT.perLine;
+  const x = PAD_L + (col + (beat - bar*LAYOUT.bpb) / LAYOUT.bpb) * LAYOUT.barW;
+  const y0 = li * LAYOUT.lineH + LAYOUT.topPad;
+  el.setAttribute("x1", x); el.setAttribute("x2", x);
+  el.setAttribute("y1", y0 + LAYOUT.top - 6);
+  el.setAttribute("y2", y0 + LAYOUT.top + LAYOUT.height + 6);
+  el.setAttribute("opacity", "0.95");
+}
+
+$("btnBack").onclick = () => { $("audio").pause(); $("btnPlay").textContent="▶ 再生"; show("home"); };
+let rz; window.addEventListener("resize", () => {
+  clearTimeout(rz); rz = setTimeout(() => { if (SC && $("score").classList.contains("show")) drawScore(); }, 200);
+});
+
+// ---------------------------------------------------------------- 初期化
+(async () => {
+  try {
+    CONFIG = await api("/api/config");
+    renderEngines(CONFIG.engines);
+    const st = CONFIG.engines.stages;
+    $("aiState").textContent =
+      `分離:${st.separator.active} / 拍:${st.beat.active} / 採譜:${st.pitch.active}`
+      + ` / ドラム:${st.drums.active} (${CONFIG.engines.device})`;
+  } catch (e) {}
+  loadSongs();
+})();
+</script>
+</body>
+</html>

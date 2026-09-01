@@ -1,0 +1,12 @@
+flask
+yt-dlp
+demucs
+librosa
+soundfile
+imageio-ffmpeg
+# basic-pitch が TensorFlow を連れてくると numpy<2 に固定される。
+# その状態で numpy 2.x 向けにビルドされた scipy が入っていると
+# 「compiled using NumPy 2.x cannot be run in NumPy 1.x」で librosa ごと落ちるため、
+# 最初から numpy 1系で揃うバージョンに寄せておく。
+numpy<2
+scipy<1.14
