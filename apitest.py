@@ -220,6 +220,68 @@ def main():
           "曲を削除できる")
     check(len(c.get("/api/songs").get_json()["songs"]) == 0, "一覧から消える")
 
+    # ---------------------------------------------- 音源だけ取り込む
+    print("\n[10] 音源だけの取り込み")
+    A.AUDIO_DIR = work / "audio"
+    A.AUDIO_DIR.mkdir()
+
+    check("wav" in A.AUDIO_FORMATS and A.AUDIO_FORMATS["wav"].get("passthrough"),
+          "既定はWAV(非圧縮・変換なし)")
+    check(A._pick_format({"format": "存在しない"}) == "wav",
+          "知らない形式を指定してもWAVに落ちる")
+    check(A._pick_format({}) == "wav", "形式未指定でもWAVになる")
+
+    # 同名ファイルの連番付け(日本語のタイトルでも壊れないこと)
+    (A.AUDIO_DIR / "曲.wav").write_bytes(b"RIFFtest")
+    p2 = A._unique_path(A.AUDIO_DIR, "曲", "wav")
+    check(p2.name == "曲 (2).wav", f"同名は連番になる ({p2.name})")
+    check(A._safe_name('曲/名:前?') == "曲_名_前_",
+          f"ファイル名に使えない文字が除かれる ({A._safe_name('曲/名:前?')})")
+    (A.AUDIO_DIR / "曲.wav").unlink()
+
+    (A.AUDIO_DIR / "sample.wav").write_bytes(b"RIFFtest")
+    lst = c.get("/api/audio").get_json()
+    check(len(lst["files"]) == 1 and lst["files"][0]["name"] == "sample.wav",
+          "保存した音源が一覧に出る")
+    check(lst["total_size"] > 0 and "dir" in lst, "合計容量と保存先が返る")
+
+    r = c.get("/api/audio/file/sample.wav")
+    check(r.status_code == 200 and r.data == b"RIFFtest", "音源をダウンロードできる")
+    check(c.get("/api/audio/file/none.wav").status_code == 404, "無い音源は404")
+    check(A._audio_path("../app.py") is None, "audio/の外は参照できない")
+    check(A._audio_path("sample.wav") is not None, "audio/の中は参照できる")
+
+    check(c.delete("/api/audio/sample.wav").status_code == 200
+          and not (A.AUDIO_DIR / "sample.wav").exists(), "音源を削除できる")
+    check(len(c.get("/api/audio").get_json()["files"]) == 0, "一覧から消える")
+
+    check(c.post("/api/audio/youtube", json={"url": "not-a-url"}).status_code == 400,
+          "不正なURLは400")
+
+    cfgj = c.get("/api/config").get_json()
+    check(len(cfgj.get("audio_formats", [])) >= 3, "形式の一覧がUIに渡される")
+
+    # 実際に1本通す (ffmpegが要るので、無い環境ではスキップ扱いにする)
+    with open(f["mix"], "rb") as fh:
+        r = c.post("/api/audio/upload",
+                   data={"file": (fh, "テスト音源.wav"), "format": "wav"},
+                   content_type="multipart/form-data")
+    check(r.status_code == 200 and "job" in r.get_json(), "音源取り込みジョブが始まる")
+    job_id = r.get_json()["job"]
+    for _ in range(60):
+        st = c.get(f"/api/jobs/{job_id}").get_json()
+        if st["status"] != "running":
+            break
+        time.sleep(0.5)
+    if st["status"] == "done":
+        check(st.get("kind") == "audio", "音源ジョブとして識別できる")
+        check(st.get("file", "").endswith(".wav") and st.get("size", 0) > 0,
+              f"ファイルが書き出される ({st.get('file')})")
+        check(len(c.get("/api/audio").get_json()["files"]) == 1, "一覧に反映される")
+    else:
+        print("  SKIP  音源取り込みの実行 (ffmpegが無い環境):",
+              str(st.get("error"))[:80])
+
     shutil.rmtree(work, ignore_errors=True)
 
 

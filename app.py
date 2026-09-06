@@ -41,13 +41,32 @@ except ImportError as e:
 BASE_DIR = Path(__file__).resolve().parent
 SONGS_DIR = BASE_DIR / "songs"
 TMP_DIR = BASE_DIR / "tmp"
+AUDIO_DIR = BASE_DIR / "audio"      # 採譜せずに音源だけ取り込む置き場
 SONGS_DIR.mkdir(exist_ok=True)
 TMP_DIR.mkdir(exist_ok=True)
+AUDIO_DIR.mkdir(exist_ok=True)
 
 PORT = 8766
 ANALYSIS_SR = 22050
 PHASES = ["音源を取得", "パートを分離 (AI)", "拍・小節を解析",
           "音符を推定 (採譜)", "譜面を生成"]
+AUDIO_PHASES = ["音源を取得", "ファイルに書き出し"]
+
+# 音源だけ取り込むときに選べる形式。
+#   エフェクター判別のように音色そのものを見る用途では、非可逆圧縮のノイズが
+#   高域の歪み方を変えてしまうため wav を既定にしている。
+#   取得の時点で 44.1kHz ステレオのWAVになるので、出力は全て44.1kHz。
+#   passthrough=True の形式は変換せずにそのまま置くだけで済む。
+AUDIO_FORMATS = {
+    "wav":      {"label": "WAV 44.1kHz ステレオ (非圧縮)", "ext": "wav",
+                 "passthrough": True, "args": []},
+    "wav_mono": {"label": "WAV 44.1kHz モノラル (非圧縮)", "ext": "wav",
+                 "args": ["-ac", "1", "-c:a", "pcm_s16le"]},
+    "flac":     {"label": "FLAC 44.1kHz (可逆圧縮・容量は約半分)", "ext": "flac",
+                 "args": ["-c:a", "flac"]},
+    "mp3":      {"label": "MP3 320kbps (非可逆・音色分析には不向き)", "ext": "mp3",
+                 "args": ["-b:a", "320k"]},
+}
 
 # 譜面にするパート
 #   stem     … 使いたいステム名
@@ -418,6 +437,64 @@ def start_job(get_source_wav, title_hint=""):
     return job_id
 
 
+# ---------------------------------------------------------------- 音源だけ取り込む
+def _unique_path(dir_path, stem, ext):
+    """同名ファイルがあれば連番を付ける"""
+    p = Path(dir_path) / f"{stem}.{ext}"
+    i = 2
+    while p.exists():
+        p = Path(dir_path) / f"{stem} ({i}).{ext}"
+        i += 1
+    return p
+
+
+def run_audio_job(job_id, get_source_wav, title_hint, fmt):
+    """採譜せずに音源を取り込むだけのジョブ
+
+    エフェクター判別など、別のアプリで音を解析したいときに使う。
+    分離も採譜もしないので数十秒で終わる。
+    """
+    job = jobs[job_id]
+    spec = AUDIO_FORMATS.get(fmt) or AUDIO_FORMATS["wav"]
+    tmp_wav = TMP_DIR / f"audio_{job_id}.wav"
+    try:
+        job.update(phase=0, progress=None, detail="")
+        title = get_source_wav(tmp_wav, job) or title_hint or "無題"
+        job["title"] = title
+
+        job.update(phase=1, progress=None,
+                   detail=f"{spec['label']} で書き出し中...")
+        AUDIO_DIR.mkdir(exist_ok=True)
+        dst = _unique_path(AUDIO_DIR, _safe_name(title), spec["ext"])
+        if spec.get("passthrough"):
+            # 取得時点で 44.1kHz ステレオのWAVなので、変換せずに移すだけ
+            shutil.move(str(tmp_wav), dst)
+        else:
+            run_ffmpeg(["-i", str(tmp_wav), "-vn", *spec["args"], str(dst)])
+            tmp_wav.unlink(missing_ok=True)
+
+        size = dst.stat().st_size
+        job.update(status="done", phase=len(AUDIO_PHASES), progress=None,
+                   detail="", file=dst.name, size=size)
+        log("audio", job_id, f"完了: {dst.name} ({size/1e6:.1f}MB)")
+    except Exception as e:
+        traceback.print_exc()
+        job.update(status="error", error=str(e))
+    finally:
+        tmp_wav.unlink(missing_ok=True)
+
+
+def start_audio_job(get_source_wav, title_hint="", fmt="wav"):
+    job_id = uuid.uuid4().hex[:12]
+    jobs[job_id] = {"status": "running", "phases": AUDIO_PHASES, "phase": 0,
+                    "progress": None, "detail": "", "error": None,
+                    "kind": "audio", "title": title_hint, "started": time.time()}
+    threading.Thread(target=run_audio_job,
+                     args=(job_id, get_source_wav, title_hint, fmt),
+                     daemon=True).start()
+    return job_id
+
+
 # ---------------------------------------------------------------- API
 @app.get("/")
 def index():
@@ -432,6 +509,9 @@ def get_config():
         "drum_order": transcribe.DRUM_ORDER,
         "drum_labels": transcribe.DRUM_LABELS,
         "engines": engines.describe(),
+        "audio_formats": [{"id": k, "label": v["label"]}
+                          for k, v in AUDIO_FORMATS.items()],
+        "audio_dir": str(AUDIO_DIR),
     })
 
 
@@ -497,12 +577,11 @@ def yt_search():
     return jsonify({"results": out})
 
 
-@app.post("/api/songs/youtube")
-def add_youtube():
-    url = (request.get_json(silent=True) or {}).get("url", "").strip()
-    if not re.match(r"^https?://", url):
-        return jsonify({"error": "URLが正しくありません"}), 400
+def make_youtube_fetch(url):
+    """YouTubeから音声を取ってWAVにするクロージャを作る
 
+    譜面を作るジョブと、音源だけ取り込むジョブの両方から使う。
+    """
     def fetch(dst_wav, job):
         import yt_dlp
         tmp = TMP_DIR / uuid.uuid4().hex
@@ -559,7 +638,25 @@ def add_youtube():
         shutil.rmtree(tmp, ignore_errors=True)
         return info.get("title", "無題")
 
-    return jsonify({"job": start_job(fetch)})
+    return fetch
+
+
+def make_upload_fetch(tmp_path, title):
+    """アップロードされたファイルをWAVにするクロージャを作る"""
+    def fetch(dst_wav, job):
+        job["detail"] = "音声を変換中..."
+        to_wav(tmp_path, dst_wav)
+        tmp_path.unlink(missing_ok=True)
+        return title
+    return fetch
+
+
+@app.post("/api/songs/youtube")
+def add_youtube():
+    url = (request.get_json(silent=True) or {}).get("url", "").strip()
+    if not re.match(r"^https?://", url):
+        return jsonify({"error": "URLが正しくありません"}), 400
+    return jsonify({"job": start_job(make_youtube_fetch(url))})
 
 
 @app.post("/api/songs/upload")
@@ -570,14 +667,79 @@ def add_upload():
     tmp = TMP_DIR / (uuid.uuid4().hex + Path(f.filename).suffix)
     f.save(tmp)
     title = Path(f.filename).stem
+    return jsonify({"job": start_job(make_upload_fetch(tmp, title), title)})
 
-    def fetch(dst_wav, job):
-        job["detail"] = "音声を変換中..."
-        to_wav(tmp, dst_wav)
-        tmp.unlink(missing_ok=True)
-        return title
 
-    return jsonify({"job": start_job(fetch, title)})
+# ------------------------------------------------ 音源だけ取り込む (採譜しない)
+def _pick_format(body):
+    fmt = (body or {}).get("format", "wav")
+    return fmt if fmt in AUDIO_FORMATS else "wav"
+
+
+@app.post("/api/audio/youtube")
+def add_audio_youtube():
+    body = request.get_json(silent=True) or {}
+    url = body.get("url", "").strip()
+    if not re.match(r"^https?://", url):
+        return jsonify({"error": "URLが正しくありません"}), 400
+    return jsonify({"job": start_audio_job(make_youtube_fetch(url),
+                                           fmt=_pick_format(body))})
+
+
+@app.post("/api/audio/upload")
+def add_audio_upload():
+    f = request.files.get("file")
+    if not f:
+        return jsonify({"error": "ファイルがありません"}), 400
+    tmp = TMP_DIR / (uuid.uuid4().hex + Path(f.filename).suffix)
+    f.save(tmp)
+    title = Path(f.filename).stem
+    fmt = _pick_format({"format": request.form.get("format", "wav")})
+    return jsonify({"job": start_audio_job(make_upload_fetch(tmp, title),
+                                           title, fmt)})
+
+
+def _audio_path(name):
+    """audio/ の中のファイルだけを指すことを保証する"""
+    p = (AUDIO_DIR / name).resolve()
+    if p.parent != AUDIO_DIR.resolve() or not p.is_file():
+        return None
+    return p
+
+
+@app.get("/api/audio")
+def list_audio():
+    out, total = [], 0
+    exts = {"." + v["ext"] for v in AUDIO_FORMATS.values()}
+    AUDIO_DIR.mkdir(exist_ok=True)   # 利用者が消していても落ちないように
+    for p in AUDIO_DIR.iterdir():
+        if not p.is_file() or p.suffix.lower() not in exts:
+            continue
+        st = p.stat()
+        out.append({"name": p.name, "size": st.st_size, "created": st.st_mtime})
+        total += st.st_size
+    out.sort(key=lambda x: -x["created"])
+    return jsonify({"files": out, "total_size": total, "dir": str(AUDIO_DIR)})
+
+
+@app.get("/api/audio/file/<path:name>")
+def get_audio_file(name):
+    p = _audio_path(name)
+    if not p:
+        return "not found", 404
+    return send_file(p, as_attachment=True, download_name=p.name,
+                     conditional=True)
+
+
+@app.delete("/api/audio/<path:name>")
+def delete_audio_file(name):
+    p = _audio_path(name)
+    if p:
+        try:
+            p.unlink()
+        except OSError as e:
+            return jsonify({"error": str(e)}), 500
+    return jsonify({"ok": True})
 
 
 @app.get("/api/jobs/<job_id>")

@@ -126,6 +126,20 @@
 
   <!-- ================= ホーム ================= -->
   <div id="home" class="view show">
+    <div class="card" style="padding:14px 20px">
+      <div class="row">
+        <span style="font-size:13px;color:var(--sub);flex:none">取り込み方</span>
+        <select id="mode" style="min-width:260px">
+          <option value="score">譜面を作る(分離 + 採譜)</option>
+          <option value="audio">音源だけ保存(採譜しない・高速)</option>
+        </select>
+        <label class="f" id="fmtWrap" style="display:none">形式
+          <select id="afmt"></select>
+        </label>
+        <span class="hint" style="margin:0;flex:1" id="modeHint"></span>
+      </div>
+    </div>
+
     <div class="card">
       <h2>曲を探す</h2>
       <div class="row">
@@ -156,6 +170,12 @@
     <div class="card">
       <h2>採譜した曲 <span style="float:right;font-weight:400" id="total"></span></h2>
       <div id="songs"><div class="empty">まだありません</div></div>
+    </div>
+
+    <div class="card">
+      <h2>保存した音源 <span style="float:right;font-weight:400" id="atotal"></span></h2>
+      <div id="afiles"><div class="empty">まだありません</div></div>
+      <div class="hint" id="adir"></div>
     </div>
 
     <div class="card">
@@ -233,6 +253,29 @@ function show(view) {
   window.scrollTo(0, 0);
 }
 
+// ---------------------------------------------------------------- 取り込みモード
+const isAudioMode = () => $("mode").value === "audio";
+
+function renderMode() {
+  const audio = isAudioMode();
+  $("fmtWrap").style.display = audio ? "" : "none";
+  $("btnUrl").textContent = audio ? "音源を保存" : "採譜する";
+  $("modeHint").textContent = audio
+    ? "分離も採譜もせず、音声ファイルとして保存します(1曲数十秒)"
+    : "パートを分離して譜面を作ります(1曲数分〜十数分)";
+  document.querySelectorAll("#sres [data-i]").forEach(b =>
+    b.textContent = audio ? "音源を保存" : "採譜する");
+}
+
+/** 現在のモードに応じて、URLから取り込むリクエストを投げる */
+function importUrl(url) {
+  const audio = isAudioMode();
+  const body = audio ? {url, format: $("afmt").value} : {url};
+  return api(audio ? "/api/audio/youtube" : "/api/songs/youtube",
+    {method:"POST", headers:{"Content-Type":"application/json"},
+     body: JSON.stringify(body)});
+}
+
 // ---------------------------------------------------------------- 曲追加
 async function startJob(promise) {
   $("job").className = "job show";
@@ -262,10 +305,16 @@ function watchJob(id) {
     if (j.status === "done") {
       clearInterval(poll);
       $("job").className = "job show";
-      $("job").innerHTML = '<div class="jobtitle" style="color:var(--ok)">✓ 完了: '
-        + esc(j.title) + '</div>';
-      loadSongs();
-      openScore(j.song_id);
+      if (j.kind === "audio") {
+        $("job").innerHTML = '<div class="jobtitle" style="color:var(--ok)">✓ 保存しました: '
+          + esc(j.file || j.title) + (j.size ? ' (' + mb(j.size) + ')' : '') + '</div>';
+        loadAudio();
+      } else {
+        $("job").innerHTML = '<div class="jobtitle" style="color:var(--ok)">✓ 完了: '
+          + esc(j.title) + '</div>';
+        loadSongs();
+        openScore(j.song_id);
+      }
       return;
     }
     renderJob(j);
@@ -293,8 +342,7 @@ function renderJob(j) {
 $("btnUrl").onclick = () => {
   const url = $("url").value.trim();
   if (!url) return;
-  startJob(api("/api/songs/youtube", {method:"POST",
-    headers:{"Content-Type":"application/json"}, body: JSON.stringify({url})}));
+  startJob(importUrl(url));
 };
 $("url").addEventListener("keydown", e => { if (e.key === "Enter") $("btnUrl").click(); });
 $("btnFile").onclick = () => $("file").click();
@@ -302,9 +350,15 @@ $("file").onchange = () => {
   if (!$("file").files[0]) return;
   const fd = new FormData();
   fd.append("file", $("file").files[0]);
-  startJob(api("/api/songs/upload", {method:"POST", body: fd}));
+  if (isAudioMode()) {
+    fd.append("format", $("afmt").value);
+    startJob(api("/api/audio/upload", {method:"POST", body: fd}));
+  } else {
+    startJob(api("/api/songs/upload", {method:"POST", body: fd}));
+  }
   $("file").value = "";
 };
+$("mode").onchange = renderMode;
 
 // ---------------------------------------------------------------- YouTube検索
 const fmtViews = v => !v ? "" :
@@ -327,13 +381,12 @@ async function doSearch() {
           <div class="st">${esc(x.title)}${x.have?'<span class="havemark">取込済</span>':''}</div>
           <div class="sc2">${esc(x.channel)}${x.duration?" · "+fmt(x.duration):""}${x.views?" · "+fmtViews(x.views):""}</div>
         </div>
-        <button class="sm" data-i="${i}">採譜する</button>
+        <button class="sm" data-i="${i}">${isAudioMode() ? "音源を保存" : "採譜する"}</button>
       </div>`).join("");
     $("sres").querySelectorAll("[data-i]").forEach(b => b.onclick = () => {
       const x = r[+b.dataset.i];
       $("url").value = x.url;
-      startJob(api("/api/songs/youtube", {method:"POST",
-        headers:{"Content-Type":"application/json"}, body: JSON.stringify({url: x.url})}));
+      startJob(importUrl(x.url));
       $("job").scrollIntoView({behavior:"smooth", block:"center"});
     });
   } catch (e) {
@@ -385,7 +438,7 @@ function renderEngines(eng) {
       <div class="desc">要らないパートを外すと、その分だけ採譜が速く終わります</div>
     </div>
     <div class="engrow">
-      <span class="name">音源の保存</span>
+      <span class="name">曲データの音源</span>
       <select id="audFmt">
         <option value="opus"${eng.config.audio_format==="opus"?" selected":""}>Opus (小さい・推奨)</option>
         <option value="mp3"${eng.config.audio_format==="mp3"?" selected":""}>MP3 (互換性重視)</option>
@@ -441,6 +494,36 @@ async function loadSongs() {
       if (!confirm("この曲を削除しますか?")) return;
       await api("/api/songs/" + b.dataset.del, {method:"DELETE"});
       loadSongs();
+    });
+}
+
+// ---------------------------------------------------------------- 保存した音源
+async function loadAudio() {
+  let d;
+  try { d = await api("/api/audio"); } catch (e) { return; }
+  const list = d.files || [];
+  $("adir").textContent = "保存先: " + (d.dir || "")
+    + "  — 他のアプリからはこのパスで読めます";
+  $("atotal").textContent = list.length
+    ? `${list.length}件 · 合計 ${mb(d.total_size)}` : "";
+  if (!list.length) {
+    $("afiles").innerHTML = '<div class="empty">まだありません</div>';
+    return;
+  }
+  $("afiles").innerHTML = list.map(x => `
+    <div class="song">
+      <div class="title">${esc(x.name)}</div>
+      <div class="meta">${mb(x.size)}</div>
+      <button class="sm" data-dl="${encodeURIComponent(x.name)}">ダウンロード</button>
+      <button class="danger" data-adel="${encodeURIComponent(x.name)}">削除</button>
+    </div>`).join("");
+  $("afiles").querySelectorAll("[data-dl]").forEach(b =>
+    b.onclick = () => location.href = "/api/audio/file/" + b.dataset.dl);
+  $("afiles").querySelectorAll("[data-adel]").forEach(b =>
+    b.onclick = async () => {
+      if (!confirm("この音源を削除しますか?")) return;
+      await api("/api/audio/" + b.dataset.adel, {method:"DELETE"});
+      loadAudio();
     });
 }
 
@@ -778,6 +861,9 @@ let rz; window.addEventListener("resize", () => {
 (async () => {
   try {
     CONFIG = await api("/api/config");
+    $("afmt").innerHTML = (CONFIG.audio_formats || []).map(f =>
+      `<option value="${f.id}">${esc(f.label)}</option>`).join("");
+    renderMode();
     renderEngines(CONFIG.engines);
     const st = CONFIG.engines.stages;
     $("aiState").textContent =
@@ -785,6 +871,7 @@ let rz; window.addEventListener("resize", () => {
       + ` / ドラム:${st.drums.active} (${CONFIG.engines.device})`;
   } catch (e) {}
   loadSongs();
+  loadAudio();
 })();
 </script>
 </body>

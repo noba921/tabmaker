@@ -9,6 +9,7 @@ config.json
 server.log
 songs/
 tmp/
+audio/
 
 # --- 音源・譜面の成果物 ---
 # 著作物を含みうるため、リポジトリには絶対に入れない
