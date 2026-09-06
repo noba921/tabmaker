@@ -4,6 +4,10 @@ demucs
 librosa
 soundfile
 imageio-ffmpeg
+# basic-pitch は内部で pkg_resources を import する。
+# setuptools 81 以降では pkg_resources が同梱されなくなったため、
+# 明示的に入れておかないと「basic_pitch を読み込めません」になる。
+setuptools<81
 # basic-pitch が TensorFlow を連れてくると numpy<2 に固定される。
 # その状態で numpy 2.x 向けにビルドされた scipy が入っていると
 # 「compiled using NumPy 2.x cannot be run in NumPy 1.x」で librosa ごと落ちるため、

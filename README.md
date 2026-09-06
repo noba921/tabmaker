@@ -193,6 +193,17 @@ CPUで現実的な改善(Beat This! / 6stem分離 / コード認識 / ADTOF / �
 - 「このサイトにアクセスできません」→ run.batの黒い画面に `TAB Maker` と出てから F5
 - サーバーが落ちる → エラーは `server.log` に記録されます
 - Pythonは **3.10〜3.12推奨**。3.13以降だと librosa/demucs が入らないことがあります
+- **「basic_pitch を読み込めません: No module named 'pkg_resources'」と出る**
+  → basic-pitch は内部で `pkg_resources` を使いますが、setuptools 81 以降には
+  同梱されなくなりました。次で直ります:
+  ```
+  cd C:\tabmaker
+  venv\Scripts\python.exe -m pip install "setuptools<81"
+  ```
+- **「beat_this を読み込めません」と出る** → まだ入っていません:
+  ```
+  venv\Scripts\python.exe -m pip install tqdm einops soxr rotary-embedding-torch beat-this
+  ```
 - **`ImportError: ... compiled using NumPy 2.x cannot be run in NumPy 1.x`**
   → basic-pitch が連れてくる TensorFlow が numpy を1系に固定する一方で、
   numpy 2系向けの scipy が入っている状態です。次で直ります:

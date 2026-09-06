@@ -61,11 +61,15 @@ echo.
 echo --------------------------------------------------
 echo  [1/3] note-detection AI (basic-pitch)
 echo --------------------------------------------------
+rem basic-pitch は pkg_resources を使う。setuptools 81+ には含まれないので先に固定する
+venv\Scripts\python.exe -m pip install "setuptools<81"
 venv\Scripts\python.exe -m pip install "basic-pitch[onnx]"
 if errorlevel 1 (
   echo [WARN] onnx build failed. Trying the TensorFlow build instead...
   venv\Scripts\python.exe -m pip install "basic-pitch[tf]"
 )
+rem 依存の解決で setuptools が上げ直されることがあるため、最後にもう一度固定する
+venv\Scripts\python.exe -m pip install "setuptools<81"
 
 echo.
 echo --------------------------------------------------

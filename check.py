@@ -6,6 +6,21 @@ from pathlib import Path
 
 BASE = Path(__file__).resolve().parent
 OK, NG, WARN = "[OK]  ", "[NG]  ", "[WARN]"
+PY = r"venv\Scripts\python.exe -m pip install "
+
+# 実際に起きた読み込みエラーと、その直し方
+_KNOWN_FIXES = [
+    ("No module named 'pkg_resources'",
+     PY + '"setuptools<81"'),
+    ("No module named 'beat_this'",
+     PY + "tqdm einops soxr rotary-embedding-torch beat-this"),
+    ("No module named 'adtof_pytorch'",
+     PY + '"git+https://github.com/xavriley/ADTOF-pytorch"  (Gitが必要)'),
+    ("No module named 'audio_separator'",
+     "setup-gpu.bat を実行"),
+    ("compiled using NumPy 2.x",
+     PY + '--force-reinstall "numpy<2" "scipy<1.14"'),
+]
 
 
 def main():
@@ -46,6 +61,11 @@ def main():
         except Exception as e:
             print(WARN, f"{what} は使えません ({how} で導入)")
             print("      理由:", type(e).__name__, str(e)[:220])
+            for key, fix in _KNOWN_FIXES:
+                if key in str(e):
+                    print("      → 修復コマンド (このフォルダで実行):")
+                    print("        " + fix)
+                    break
 
     # [2a] numpy / scipy の組み合わせ (よくある落とし穴)
     print("\n[2a] numpy と scipy の相性")
